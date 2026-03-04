@@ -1,0 +1,1334 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>分层审核系统 - Layered Process Audit</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@300;400;500;700&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Noto Sans SC', sans-serif; background: #0f172a; }
+        .glass-panel {
+            background: rgba(30, 41, 59, 0.7);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        .level-card { transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); }
+        .level-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.3);
+        }
+        .measure-item {
+            animation: slideIn 0.4s ease-out forwards;
+            opacity: 0;
+            transform: translateX(-10px);
+        }
+        @keyframes slideIn {
+            to { opacity: 1; transform: translateX(0); }
+        }
+        .check-animation {
+            animation: checkPop 0.3s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+        }
+        @keyframes checkPop {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.2); }
+            100% { transform: scale(1); }
+        }
+        .gradient-text {
+            background: linear-gradient(135deg, #60a5fa 0%, #a78bfa 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        .progress-ring { transform: rotate(-90deg); transform-origin: 50% 50%; }
+        
+        .admin-sidebar {
+            background: rgba(15, 23, 42, 0.95);
+            border-right: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        .form-input {
+            background: rgba(30, 41, 59, 0.8);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            transition: all 0.3s;
+        }
+        .form-input:focus {
+            border-color: #3b82f6;
+            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+            outline: none;
+        }
+        .tab-active {
+            border-bottom: 2px solid #3b82f6;
+            color: #60a5fa;
+        }
+        
+        button, input, select {
+            touch-action: manipulation;
+            -webkit-tap-highlight-color: transparent;
+        }
+        
+        input[type="date"] {
+            position: relative;
+            min-height: 44px;
+        }
+        input[type="date"]::-webkit-calendar-picker-indicator {
+            filter: invert(1);
+            cursor: pointer;
+        }
+
+        #adminPanel { z-index: 9999; }
+        #detailModal { z-index: 9998; }
+        
+        .time-badge {
+            background: linear-gradient(135deg, rgba(245, 158, 11, 0.2) 0%, rgba(217, 70, 239, 0.2) 100%);
+            border: 1px solid rgba(245, 158, 11, 0.3);
+        }
+    </style>
+</head>
+<body class="text-slate-200 min-h-screen overflow-x-hidden">
+
+    <div class="fixed inset-0 overflow-hidden pointer-events-none">
+        <div class="absolute -top-40 -left-40 w-80 h-80 bg-blue-500 rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-pulse"></div>
+        <div class="absolute -bottom-40 -right-40 w-80 h-80 bg-purple-500 rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-pulse" style="animation-delay: 2s"></div>
+    </div>
+
+    <div class="relative max-w-6xl mx-auto p-4 md:p-6">
+        
+        <header class="mb-8 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+            <div>
+                <h1 class="text-3xl md:text-4xl font-bold mb-2">
+                    <span class="gradient-text">分层审核系统</span>
+                    <span class="text-slate-400 text-lg font-normal ml-2">LPA</span>
+                </h1>
+                <p class="text-slate-400 text-sm">基于录入时间的分层审核管理</p>
+            </div>
+            
+            <div class="flex gap-3">
+                <button onclick="app.openAdminPanel()" class="bg-slate-700 hover:bg-slate-600 text-white px-4 py-2 rounded-xl transition-all flex items-center gap-2 font-medium border border-slate-600">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
+                    管理后台
+                </button>
+                <div class="flex gap-4 glass-panel rounded-2xl p-3">
+                    <div class="text-center px-3 border-r border-slate-600">
+                        <div class="text-xl font-bold text-blue-400" id="totalMeasures">0</div>
+                        <div class="text-xs text-slate-400">总措施</div>
+                    </div>
+                    <div class="text-center px-3 border-r border-slate-600">
+                        <div class="text-xl font-bold text-green-400" id="completedToday">0</div>
+                        <div class="text-xs text-slate-400">今日完成</div>
+                    </div>
+                    <div class="text-center px-3">
+                        <div class="text-xl font-bold text-purple-400" id="pendingToday">0</div>
+                        <div class="text-xs text-slate-400">待审核</div>
+                    </div>
+                </div>
+            </div>
+        </header>
+
+        <div class="glass-panel rounded-2xl p-6 mb-6">
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6 items-end">
+                <div class="space-y-2">
+                    <label class="text-sm font-medium text-slate-300 flex items-center gap-2">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
+                        选择日期
+                    </label>
+                    <input type="date" id="datePicker" class="w-full bg-slate-800 border border-slate-600 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-blue-500 transition-all">
+                </div>
+
+                <div class="space-y-2">
+                    <label class="text-sm font-medium text-slate-300 flex items-center gap-2">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z"></path></svg>
+                        审核层级
+                    </label>
+                    <select id="levelSelect" class="w-full bg-slate-800 border border-slate-600 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-blue-500 transition-all cursor-pointer">
+                        <option value="all">全部层级</option>
+                        <option value="dept">🏢 部门级 (每周四)</option>
+                        <option value="line">🏭 产线级 (每日)</option>
+                        <option value="quality">🔍 质量级 (随机)</option>
+                    </select>
+                </div>
+
+                <div class="flex gap-3">
+                    <button onclick="app.jumpToToday()" class="flex-1 bg-slate-700 hover:bg-slate-600 text-white px-4 py-3 rounded-xl transition-all flex items-center justify-center gap-2 font-medium">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
+                        今天
+                    </button>
+                    <button onclick="app.exportReport()" class="flex-1 bg-blue-600 hover:bg-blue-500 text-white px-4 py-3 rounded-xl transition-all flex items-center justify-center gap-2 font-medium shadow-lg shadow-blue-500/25">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
+                        导出
+                    </button>
+                </div>
+            </div>
+
+            <div class="mt-4 pt-4 border-t border-slate-700/50 grid grid-cols-3 gap-4 text-sm">
+                <div class="flex items-center gap-2 text-blue-300">
+                    <span class="w-2 h-2 rounded-full bg-blue-400"></span>
+                    <span>部门级周期：<span id="deptCycleInfo">第 1/5 周</span></span>
+                </div>
+                <div class="flex items-center gap-2 text-green-300">
+                    <span class="w-2 h-2 rounded-full bg-green-400"></span>
+                    <span>产线级周期：<span id="lineCycleInfo">第 1/14 天</span></span>
+                </div>
+                <div class="flex items-center gap-2 text-purple-300">
+                    <span class="w-2 h-2 rounded-full bg-purple-400"></span>
+                    <span>质量级进度：<span id="qualityCycleInfo">0/40 次</span></span>
+                </div>
+            </div>
+        </div>
+
+        <div id="measuresContainer" class="space-y-4"></div>
+        <div id="emptyState" class="hidden glass-panel rounded-2xl p-12 text-center">
+            <div class="w-24 h-24 mx-auto mb-4 rounded-full bg-slate-800 flex items-center justify-center">
+                <svg class="w-12 h-12 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"></path></svg>
+            </div>
+            <h3 class="text-xl font-semibold text-slate-300 mb-2">该层级今日无审核任务</h3>
+            <p class="text-slate-500">请切换日期或层级查看其他审核计划</p>
+        </div>
+    </div>
+
+    <div id="adminPanel" class="fixed inset-0 z-[9999] hidden">
+        <div class="absolute inset-0 bg-black/60 backdrop-blur-sm" onclick="app.closeAdminPanel()"></div>
+        
+        <div class="absolute right-0 top-0 h-full w-full md:w-[700px] admin-sidebar shadow-2xl transform transition-transform duration-300 translate-x-full flex flex-col" id="adminSidebar">
+            
+            <div class="p-6 border-b border-slate-700 flex justify-between items-center bg-slate-900/50">
+                <div>
+                    <h2 class="text-2xl font-bold text-white flex items-center gap-2">
+                        <svg class="w-6 h-6 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"></path></svg>
+                        管理后台
+                    </h2>
+                    <p class="text-slate-400 text-sm mt-1">检查项管理与系统设置</p>
+                </div>
+                <button onclick="app.closeAdminPanel()" class="text-slate-400 hover:text-white p-2 hover:bg-slate-800 rounded-lg transition-all">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                </button>
+            </div>
+
+            <div class="flex border-b border-slate-700 bg-slate-900/30">
+                <button onclick="app.switchAdminTab('measures')" id="tab-measures" class="flex-1 py-4 text-sm font-medium text-slate-300 hover:text-white tab-active transition-colors">
+                    📋 检查项管理
+                </button>
+                <button onclick="app.switchAdminTab('frequency')" id="tab-frequency" class="flex-1 py-4 text-sm font-medium text-slate-300 hover:text-white transition-colors">
+                    ⚙️ 频次设置
+                </button>
+                <button onclick="app.switchAdminTab('data')" id="tab-data" class="flex-1 py-4 text-sm font-medium text-slate-300 hover:text-white transition-colors">
+                    💾 数据管理
+                </button>
+            </div>
+
+            <div class="flex-1 overflow-y-auto p-6" id="adminContent">
+                
+                <div id="view-measures" class="space-y-4">
+                    <div class="flex justify-between items-center mb-4">
+                        <h3 class="text-lg font-medium text-white">检查项列表</h3>
+                        <button onclick="app.addNewMeasure()" class="px-4 py-2 bg-blue-600 hover:bg-blue-500 rounded-lg text-sm text-white transition-all flex items-center gap-2">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
+                            新增检查项
+                        </button>
+                    </div>
+
+                    <div class="flex gap-2 mb-4">
+                        <input type="text" id="searchMeasures" placeholder="搜索检查项..." class="flex-1 form-input rounded-lg px-4 py-2 text-white text-sm" oninput="app.renderMeasuresList()">
+                        <select id="filterCategory" class="form-input rounded-lg px-3 py-2 text-white text-sm" onchange="app.renderMeasuresList()">
+                            <option value="all">全部类别</option>
+                            <option value="安全">安全</option>
+                            <option value="质量">质量</option>
+                            <option value="交付">交付</option>
+                            <option value="成本">成本</option>
+                            <option value="人员">人员</option>
+                            <option value="设备">设备</option>
+                        </select>
+                    </div>
+                    
+                    <div id="measuresList" class="space-y-3"></div>
+                </div>
+
+                <div id="view-frequency" class="hidden space-y-6">
+                    <div class="p-4 rounded-xl bg-blue-500/10 border border-blue-500/20 mb-4">
+                        <p class="text-sm text-blue-200">💡 以下设置为全局默认，基于录入时间计算检查周期。</p>
+                    </div>
+
+                    <div class="glass-panel rounded-xl p-6 space-y-4">
+                        <div class="flex items-center gap-3 mb-4">
+                            <span class="text-2xl">🏢</span>
+                            <div>
+                                <h4 class="text-lg font-semibold text-white">部门级设置</h4>
+                                <p class="text-sm text-slate-400">录入后每周四检查，循环5周</p>
+                            </div>
+                        </div>
+                        
+                        <div class="grid grid-cols-2 gap-4">
+                            <div>
+                                <label class="block text-sm text-slate-300 mb-2">固定检查日</label>
+                                <select id="settingDeptDay" class="w-full form-input rounded-lg px-3 py-2 text-white" onchange="app.updateFrequencySettings()">
+                                    <option value="1">每周一</option>
+                                    <option value="2">每周二</option>
+                                    <option value="3">每周三</option>
+                                    <option value="4" selected>每周四</option>
+                                    <option value="5">每周五</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="block text-sm text-slate-300 mb-2">循环周数</label>
+                                <div class="flex items-center gap-2">
+                                    <input type="number" id="settingDeptWeeks" value="5" min="1" max="10" class="w-full form-input rounded-lg px-3 py-2 text-white" onchange="app.updateFrequencySettings()">
+                                    <span class="text-slate-400 text-sm whitespace-nowrap">周</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="glass-panel rounded-xl p-6 space-y-4">
+                        <div class="flex items-center gap-3 mb-4">
+                            <span class="text-2xl">🏭</span>
+                            <div>
+                                <h4 class="text-lg font-semibold text-white">产线级设置</h4>
+                                <p class="text-sm text-slate-400">录入后每天检查，持续固定天数</p>
+                            </div>
+                        </div>
+                        
+                        <div>
+                            <label class="block text-sm text-slate-300 mb-2">持续天数</label>
+                            <div class="flex items-center gap-2">
+                                <input type="number" id="settingLineDays" value="14" min="7" max="30" class="w-full form-input rounded-lg px-3 py-2 text-white" onchange="app.updateFrequencySettings()">
+                                <span class="text-slate-400 text-sm whitespace-nowrap">天（2周）</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="glass-panel rounded-xl p-6 space-y-4">
+                        <div class="flex items-center gap-3 mb-4">
+                            <span class="text-2xl">🔍</span>
+                            <div>
+                                <h4 class="text-lg font-semibold text-white">质量级设置</h4>
+                                <p class="text-sm text-slate-400">录入后一年内随机抽查</p>
+                            </div>
+                        </div>
+                        
+                        <div>
+                            <label class="block text-sm text-slate-300 mb-2">全年检查次数</label>
+                            <div class="flex items-center gap-2">
+                                <input type="number" id="settingQualityCount" value="40" min="1" max="100" class="w-full form-input rounded-lg px-3 py-2 text-white" onchange="app.updateFrequencySettings()">
+                                <span class="text-slate-400 text-sm whitespace-nowrap">次/年</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="view-data" class="hidden space-y-6">
+                    <div class="glass-panel rounded-xl p-6 space-y-4">
+                        <h4 class="text-lg font-medium text-white mb-4">数据备份与恢复</h4>
+                        
+                        <div class="flex justify-between items-center p-4 rounded-lg bg-slate-800/50 border border-slate-700">
+                            <div>
+                                <div class="text-sm font-medium text-slate-200">导出所有数据</div>
+                                <div class="text-xs text-slate-400">包含检查项、审核记录、设置</div>
+                            </div>
+                            <button onclick="app.backupData()" class="px-4 py-2 bg-green-600 hover:bg-green-500 rounded-lg text-sm text-white transition-colors">
+                                导出备份
+                            </button>
+                        </div>
+
+                        <div class="flex justify-between items-center p-4 rounded-lg bg-slate-800/50 border border-slate-700">
+                            <div>
+                                <div class="text-sm font-medium text-slate-200">导入数据</div>
+                                <div class="text-xs text-slate-400">从JSON文件恢复数据</div>
+                            </div>
+                            <label class="px-4 py-2 bg-purple-600 hover:bg-purple-500 rounded-lg text-sm text-white transition-colors cursor-pointer">
+                                选择文件
+                                <input type="file" accept=".json" class="hidden" onchange="app.restoreData(this)">
+                            </label>
+                        </div>
+
+                        <div class="pt-4 border-t border-slate-700">
+                            <button onclick="app.clearAllData()" class="w-full px-4 py-3 rounded-xl border border-red-500/50 text-red-400 hover:bg-red-500/10 transition-all text-sm">
+                                ⚠️ 清空所有数据（不可恢复）
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="view-edit" class="hidden space-y-6">
+                    <div class="flex items-center gap-2 mb-4">
+                        <button onclick="app.switchAdminTab('measures')" class="text-slate-400 hover:text-white">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path></svg>
+                        </button>
+                        <h3 class="text-lg font-medium text-white" id="editFormTitle">新增检查项</h3>
+                    </div>
+
+                    <form id="measureForm" onsubmit="app.saveMeasure(event)" class="space-y-4">
+                        <input type="hidden" id="editId">
+                        
+                        <div class="p-4 rounded-xl bg-amber-500/10 border border-amber-500/20">
+                            <p class="text-sm text-amber-200">⏰ 保存后将自动记录当前时间为录入时间，所有层级检查周期从此时间开始计算。</p>
+                        </div>
+                        
+                        <div>
+                            <label class="block text-sm font-medium text-slate-300 mb-2">检查项名称 <span class="text-red-400">*</span></label>
+                            <input type="text" id="measureName" required class="w-full form-input rounded-xl px-4 py-3 text-white" placeholder="例如：检查设备点检记录完整性">
+                        </div>
+
+                        <div>
+                            <label class="block text-sm font-medium text-slate-300 mb-2">所属类别 <span class="text-red-400">*</span></label>
+                            <select id="measureCategory" required class="w-full form-input rounded-xl px-4 py-3 text-white">
+                                <option value="">请选择...</option>
+                                <option value="安全">安全</option>
+                                <option value="质量">质量</option>
+                                <option value="交付">交付</option>
+                                <option value="成本">成本</option>
+                                <option value="人员">人员</option>
+                                <option value="设备">设备</option>
+                            </select>
+                        </div>
+
+                        <div>
+                            <label class="block text-sm font-medium text-slate-300 mb-2">检查标准描述</label>
+                            <textarea id="measureDesc" rows="3" class="w-full form-input rounded-xl px-4 py-3 text-white text-sm" placeholder="详细描述检查内容、判定标准..."></textarea>
+                        </div>
+
+                        <div>
+                            <label class="block text-sm font-medium text-slate-300 mb-2">责任岗位</label>
+                            <input type="text" id="measureOwner" class="w-full form-input rounded-xl px-4 py-3 text-white text-sm" placeholder="例如：班组长、质量工程师">
+                        </div>
+
+                        <div>
+                            <label class="block text-sm font-medium text-slate-300 mb-2">标签</label>
+                            <div class="flex flex-wrap gap-2 mb-2" id="tagsContainer"></div>
+                            <div class="flex gap-2">
+                                <input type="text" id="newTag" class="flex-1 form-input rounded-lg px-3 py-2 text-white text-sm" placeholder="添加标签..." onkeypress="if(event.key==='Enter'){app.addTag();event.preventDefault();}">
+                                <button type="button" onclick="app.addTag()" class="px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded-lg text-sm transition-colors">添加</button>
+                            </div>
+                        </div>
+
+                        <div class="flex items-center gap-2 p-3 rounded-lg bg-slate-800/30 border border-slate-700">
+                            <input type="checkbox" id="measureActive" checked class="w-4 h-4 rounded border-slate-600 text-blue-500 focus:ring-blue-500 bg-slate-700">
+                            <label for="measureActive" class="text-sm text-slate-300">启用此检查项（三层级同时检查）</label>
+                        </div>
+
+                        <div class="p-4 rounded-xl bg-slate-800/50 border border-slate-700 space-y-2">
+                            <h4 class="text-sm font-medium text-slate-300 mb-2">录入后将按以下周期执行</h4>
+                            <div class="flex items-center gap-2 text-xs text-slate-400">
+                                <span class="w-2 h-2 rounded-full bg-blue-400"></span>
+                                <span>部门级：每周<span id="previewDeptDay">四</span>，从录入后第1个周四开始，共<span id="previewDeptWeeks">5</span>周</span>
+                            </div>
+                            <div class="flex items-center gap-2 text-xs text-slate-400">
+                                <span class="w-2 h-2 rounded-full bg-green-400"></span>
+                                <span>产线级：每天，从录入日开始，共<span id="previewLineDays">14</span>天</span>
+                            </div>
+                            <div class="flex items-center gap-2 text-xs text-slate-400">
+                                <span class="w-2 h-2 rounded-full bg-purple-400"></span>
+                                <span>质量级：录入后1年内随机<span id="previewQualityCount">40</span>次</span>
+                            </div>
+                        </div>
+
+                        <div class="flex gap-3 pt-4 border-t border-slate-700">
+                            <button type="button" onclick="app.switchAdminTab('measures')" class="flex-1 px-4 py-3 rounded-xl border border-slate-600 text-slate-300 hover:bg-slate-800 transition-all">
+                                取消
+                            </button>
+                            <button type="submit" class="flex-1 px-4 py-3 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-medium shadow-lg shadow-blue-500/25 transition-all">
+                                保存并记录时间
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="detailModal" class="hidden fixed inset-0 bg-black/80 backdrop-blur-sm z-[9998] flex items-center justify-center p-4">
+        <div class="glass-panel rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto p-6 transform transition-all scale-95 opacity-0" id="modalContent">
+            <div class="flex justify-between items-start mb-6">
+                <div>
+                    <div class="flex items-center gap-2 mb-2">
+                        <span id="modalLevelBadge" class="inline-block px-3 py-1 rounded-full text-xs font-medium"></span>
+                        <span id="modalCycleInfo" class="text-xs text-slate-400"></span>
+                    </div>
+                    <h2 id="modalTitle" class="text-2xl font-bold text-white"></h2>
+                </div>
+                <button onclick="app.closeModal()" class="text-slate-400 hover:text-white transition-colors p-2">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                </button>
+            </div>
+            <div id="modalBody" class="space-y-4"></div>
+            <div class="mt-6 pt-6 border-t border-slate-700 flex justify-end gap-3">
+                <button onclick="app.closeModal()" class="px-4 py-2 rounded-lg text-slate-300 hover:text-white transition-colors">关闭</button>
+                <button onclick="app.saveCheck()" class="px-6 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg transition-all shadow-lg shadow-blue-500/25">保存记录</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let app;
+
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', initApp);
+        } else {
+            initApp();
+        }
+
+        function initApp() {
+            app = new LayeredAuditApp();
+        }
+
+        class LayeredAuditApp {
+            constructor() {
+                this.defaultSettings = {
+                    deptDay: 4,
+                    deptWeeks: 5,
+                    lineDays: 14,
+                    qualityCount: 40
+                };
+                
+                this.settings = this.loadSettings();
+                this.measures = this.loadMeasures();
+                this.currentDate = new Date();
+                this.selectedLevel = 'all';
+                this.checks = JSON.parse(localStorage.getItem('lpa_checks') || '{}');
+                this.qualitySchedule = {};
+                this.currentTags = [];
+                this.currentDetail = null;
+                
+                this.init();
+            }
+
+            init() {
+                this.setupEventListeners();
+                this.generateAllQualitySchedules();
+                this.render();
+                this.updateStats();
+                this.updateCycleInfo();
+            }
+
+            loadSettings() {
+                const saved = localStorage.getItem('lpa_settings');
+                return saved ? JSON.parse(saved) : { ...this.defaultSettings };
+            }
+
+            saveSettings() {
+                localStorage.setItem('lpa_settings', JSON.stringify(this.settings));
+                this.generateAllQualitySchedules();
+                this.render();
+                this.updateCycleInfo();
+            }
+
+            loadMeasures() {
+                const saved = localStorage.getItem('lpa_measures');
+                if (saved) {
+                    const measures = JSON.parse(saved);
+                    if (measures.length > 0) return measures;
+                }
+                
+                // 默认示例数据 - 带创建时间
+                const now = new Date().toISOString();
+                const lastWeek = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+                const twoWeeksAgo = new Date(Date.now() - 14 * 24 * 60 * 60 * 1000).toISOString();
+                
+                return [
+                    { 
+                        id: 'm-1', 
+                        category: '安全', 
+                        action: '检查设备点检记录完整性', 
+                        desc: '确认所有设备点检表已按时填写，无遗漏项', 
+                        owner: '部门经理', 
+                        tags: ['设备', '记录'], 
+                        active: true,
+                        createdAt: now
+                    },
+                    { 
+                        id: 'm-2', 
+                        category: '质量', 
+                        action: '验证防错装置有效性', 
+                        desc: '检查防错装置功能正常', 
+                        owner: '质量工程师', 
+                        tags: ['防错'], 
+                        active: true,
+                        createdAt: lastWeek
+                    },
+                    { 
+                        id: 'm-3', 
+                        category: '交付', 
+                        action: '确认物料先进先出执行', 
+                        desc: '检查物料FIFO执行', 
+                        owner: '仓库主管', 
+                        tags: ['FIFO'], 
+                        active: true,
+                        createdAt: twoWeeksAgo
+                    }
+                ];
+            }
+
+            saveMeasures() {
+                localStorage.setItem('lpa_measures', JSON.stringify(this.measures));
+                this.generateAllQualitySchedules();
+                this.render();
+                this.updateStats();
+            }
+
+            setupEventListeners() {
+                const datePicker = document.getElementById('datePicker');
+                const today = new Date();
+                const yyyy = today.getFullYear();
+                const mm = String(today.getMonth() + 1).padStart(2, '0');
+                const dd = String(today.getDate()).padStart(2, '0');
+                datePicker.value = `${yyyy}-${mm}-${dd}`;
+                
+                datePicker.addEventListener('change', (e) => {
+                    this.currentDate = new Date(e.target.value);
+                    this.render();
+                    this.updateStats();
+                    this.updateCycleInfo();
+                });
+
+                const levelSelect = document.getElementById('levelSelect');
+                levelSelect.addEventListener('change', (e) => {
+                    this.selectedLevel = e.target.value;
+                    this.render();
+                    this.updateStats();
+                });
+
+                document.getElementById('settingDeptDay').value = this.settings.deptDay;
+                document.getElementById('settingDeptWeeks').value = this.settings.deptWeeks;
+                document.getElementById('settingLineDays').value = this.settings.lineDays;
+                document.getElementById('settingQualityCount').value = this.settings.qualityCount;
+            }
+
+            // 为每个检查项生成质量级随机计划（基于创建时间）
+            generateAllQualitySchedules() {
+                this.qualitySchedule = {};
+                this.measures.forEach(m => {
+                    if (m.active && m.createdAt) {
+                        this.qualitySchedule[m.id] = this.generateQualityScheduleForMeasure(m);
+                    }
+                });
+            }
+
+            generateQualityScheduleForMeasure(measure) {
+                const createdAt = new Date(measure.createdAt);
+                const year = createdAt.getFullYear();
+                const dates = [];
+                const count = this.settings.qualityCount;
+                
+                // 从创建日期开始，一年内随机分布
+                const startDay = Math.floor((createdAt - new Date(year, 0, 0)) / (1000 * 60 * 60 * 24));
+                const daysInYear = 365;
+                const interval = Math.floor((daysInYear - startDay) / count);
+                
+                for (let i = 0; i < count; i++) {
+                    const baseDay = startDay + (i * interval);
+                    const randomOffset = Math.floor(Math.random() * (interval * 0.6)) - Math.floor(interval * 0.3);
+                    const dayOfYear = Math.max(startDay, Math.min(364, baseDay + randomOffset));
+                    
+                    const date = new Date(year, 0, dayOfYear + 1);
+                    const dateStr = date.toISOString().split('T')[0];
+                    dates.push(dateStr);
+                }
+                
+                return dates.sort();
+            }
+
+            // 判断检查项在某层级某日是否应该显示（基于创建时间）
+            shouldShowMeasure(measure, level, date) {
+                if (!measure.active || !measure.createdAt) return false;
+                
+                const createdAt = new Date(measure.createdAt);
+                const checkDate = new Date(date);
+                const dateStr = checkDate.toISOString().split('T')[0];
+                
+                // 检查日期不能早于创建日期
+                if (checkDate < new Date(createdAt.toDateString())) return false;
+                
+                const dayOfWeek = checkDate.getDay() || 7; // 1-7
+                
+                // 计算从创建日期到检查日期的天数差
+                const daysDiff = Math.floor((checkDate - createdAt) / (1000 * 60 * 60 * 24));
+                
+                switch(level) {
+                    case 'dept':
+                        // 必须是设定的星期几
+                        if (dayOfWeek !== parseInt(this.settings.deptDay)) return false;
+                        
+                        // 计算是创建后的第几周
+                        const weeksSinceCreated = Math.floor(daysDiff / 7) + 1;
+                        
+                        // 在循环周期内（1-5周）
+                        return weeksSinceCreated >= 1 && weeksSinceCreated <= this.settings.deptWeeks;
+                    
+                    case 'line':
+                        // 创建后的前N天
+                        return daysDiff >= 0 && daysDiff < this.settings.lineDays;
+                    
+                    case 'quality':
+                        // 检查是否在随机生成的日期列表中
+                        return this.qualitySchedule[measure.id]?.includes(dateStr);
+                    
+                    default:
+                        return false;
+                }
+            }
+
+            getCheckStatus(measureId, level, dateStr) {
+                const key = `${measureId}-${level}-${dateStr}`;
+                return this.checks[key] || { completed: false, count: 0, note: '' };
+            }
+
+            // 计算周期信息（基于创建时间）
+            getCycleInfo(level, date, measure) {
+                if (!measure || !measure.createdAt) return '';
+                
+                const createdAt = new Date(measure.createdAt);
+                const checkDate = new Date(date);
+                const daysDiff = Math.floor((checkDate - createdAt) / (1000 * 60 * 60 * 24));
+                
+                switch(level) {
+                    case 'dept':
+                        const weekNum = Math.floor(daysDiff / 7) + 1;
+                        if (weekNum < 1 || weekNum > this.settings.deptWeeks) return '已结束';
+                        return `第 ${weekNum}/${this.settings.deptWeeks} 周`;
+                    
+                    case 'line':
+                        const dayNum = daysDiff + 1;
+                        if (dayNum < 1 || dayNum > this.settings.lineDays) return '已结束';
+                        return `第 ${dayNum}/${this.settings.lineDays} 天`;
+                    
+                    case 'quality':
+                        // 计算该检查项在创建后已完成的质量检查次数
+                        const schedule = this.qualitySchedule[measure.id] || [];
+                        const currentDateStr = checkDate.toISOString().split('T')[0];
+                        const passedChecks = schedule.filter(d => d <= currentDateStr).length;
+                        return `${passedChecks}/${schedule.length} 次`;
+                    
+                    default:
+                        return '';
+                }
+            }
+
+            updateCycleInfo() {
+                // 显示当前日期的总体周期信息（不针对特定检查项）
+                document.getElementById('deptCycleInfo').textContent = `每周${['','一','二','三','四','五'][this.settings.deptDay]}`;
+                document.getElementById('lineCycleInfo').textContent = `${this.settings.lineDays}天周期`;
+                document.getElementById('qualityCycleInfo').textContent = `${this.settings.qualityCount}次/年`;
+            }
+
+            render() {
+                const container = document.getElementById('measuresContainer');
+                const emptyState = document.getElementById('emptyState');
+                const dateStr = this.currentDate.toISOString().split('T')[0];
+                
+                let html = '';
+                let hasContent = false;
+                
+                const levels = this.selectedLevel === 'all' 
+                    ? ['dept', 'line', 'quality'] 
+                    : [this.selectedLevel];
+                
+                const levelNames = { dept: '部门级', line: '产线级', quality: '质量级' };
+                const levelColors = { dept: 'blue', line: 'green', quality: 'purple' };
+                const levelIcons = { dept: '🏢', line: '🏭', quality: '🔍' };
+                
+                levels.forEach((level, levelIndex) => {
+                    const levelMeasures = this.measures.filter(m => this.shouldShowMeasure(m, level, this.currentDate));
+                    
+                    if (levelMeasures.length > 0) {
+                        hasContent = true;
+                        
+                        html += `
+                            <div class="flex items-center gap-3 mb-4 mt-6 first:mt-0">
+                                <div class="flex items-center gap-2 px-4 py-2 rounded-full bg-${levelColors[level]}-500/20 border border-${levelColors[level]}-500/30">
+                                    <span class="text-xl">${levelIcons[level]}</span>
+                                    <span class="font-medium text-${levelColors[level]}-300">${levelNames[level]}</span>
+                                </div>
+                                <div class="flex-1 h-px bg-slate-700"></div>
+                                <span class="text-xs text-slate-500">${levelMeasures.length} 项</span>
+                            </div>
+                        `;
+                        
+                        html += levelMeasures.map((m, index) => {
+                            const status = this.getCheckStatus(m.id, level, dateStr);
+                            const progress = this.calculateProgress(level, status);
+                            const cycleInfo = this.getCycleInfo(level, this.currentDate, m);
+                            const createdDate = new Date(m.createdAt).toLocaleDateString('zh-CN');
+                            
+                            return `
+                                <div class="glass-panel rounded-2xl p-5 level-card cursor-pointer measure-item" 
+                                     style="animation-delay: ${(levelIndex * 0.1) + (index * 0.05)}s"
+                                     onclick="app.openDetail('${m.id}', '${level}')">
+                                    <div class="flex items-start justify-between gap-4">
+                                        <div class="flex-1">
+                                            <div class="flex items-center gap-2 mb-2 flex-wrap">
+                                                <span class="px-2 py-0.5 rounded text-xs bg-slate-700 text-slate-300">${m.category}</span>
+                                                <span class="px-2 py-0.5 rounded text-xs time-badge text-amber-300">录入: ${createdDate}</span>
+                                                <span class="px-2 py-0.5 rounded text-xs bg-${levelColors[level]}-500/20 text-${levelColors[level]}-300 border border-${levelColors[level]}-500/30">${cycleInfo}</span>
+                                                ${m.tags?.map(t => `<span class="px-2 py-0.5 rounded text-xs bg-slate-800 text-slate-400 border border-slate-700">#${t}</span>`).join('') || ''}
+                                            </div>
+                                            <h3 class="text-lg font-semibold text-white mb-2">${m.action}</h3>
+                                            <div class="flex items-center gap-3 text-xs text-slate-400">
+                                                ${m.owner ? `<span class="flex items-center gap-1"><svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path></svg>${m.owner}</span>` : ''}
+                                            </div>
+                                        </div>
+                                        
+                                        <div class="flex flex-col items-end gap-2">
+                                            <div class="relative w-14 h-14">
+                                                <svg class="w-14 h-14 progress-ring">
+                                                    <circle cx="28" cy="28" r="24" stroke="currentColor" stroke-width="3" fill="none" class="text-slate-700"></circle>
+                                                    <circle cx="28" cy="28" r="24" stroke="currentColor" stroke-width="3" fill="none" 
+                                                            class="text-${levelColors[level]}-500 transition-all duration-1000"
+                                                            stroke-dasharray="${2 * Math.PI * 24}"
+                                                            stroke-dashoffset="${2 * Math.PI * 24 * (1 - progress)}"></circle>
+                                                </svg>
+                                                <div class="absolute inset-0 flex items-center justify-center text-xs font-bold">
+                                                    ${Math.round(progress * 100)}%
+                                                </div>
+                                            </div>
+                                            <span class="px-2 py-1 rounded-full text-xs font-medium ${status.completed ? 'bg-green-500/20 text-green-400 border border-green-500/30' : 'bg-yellow-500/20 text-yellow-400 border border-yellow-500/30'}">
+                                                ${status.completed ? '✓' : '⏳'}
+                                            </span>
+                                        </div>
+                                    </div>
+                                    
+                                    ${level === 'dept' && !status.completed ? `
+                                        <div class="mt-4 pt-3 border-t border-slate-700/50 flex gap-2">
+                                            ${Array.from({length: 5}, (_, i) => `
+                                                <button onclick="event.stopPropagation(); app.quickCheck('${m.id}', 'dept', ${i})" 
+                                                        class="w-8 h-8 rounded-lg border-2 ${status.count > i ? 'bg-blue-500 border-blue-500 text-white' : 'border-slate-600 hover:border-blue-500'} transition-all flex items-center justify-center text-xs">
+                                                    ${status.count > i ? '✓' : i + 1}
+                                                </button>
+                                            `).join('')}
+                                            <span class="ml-2 text-xs text-slate-500 self-center">需确认5次</span>
+                                        </div>
+                                    ` : ''}
+                                </div>
+                            `;
+                        }).join('');
+                    }
+                });
+                
+                if (!hasContent) {
+                    container.innerHTML = '';
+                    emptyState.classList.remove('hidden');
+                } else {
+                    emptyState.classList.add('hidden');
+                    container.innerHTML = html;
+                }
+            }
+
+            calculateProgress(level, status) {
+                switch(level) {
+                    case 'dept':
+                        return (status.count || 0) / 5;
+                    case 'line':
+                        return status.completed ? 1 : 0;
+                    case 'quality':
+                        return status.completed ? 1 : 0;
+                    default:
+                        return 0;
+                }
+            }
+
+            openAdminPanel() {
+                const panel = document.getElementById('adminPanel');
+                const sidebar = document.getElementById('adminSidebar');
+                
+                panel.classList.remove('hidden');
+                void panel.offsetWidth;
+                
+                setTimeout(() => {
+                    sidebar.classList.remove('translate-x-full');
+                }, 10);
+                
+                this.renderMeasuresList();
+            }
+
+            closeAdminPanel() {
+                const sidebar = document.getElementById('adminSidebar');
+                const panel = document.getElementById('adminPanel');
+                
+                sidebar.classList.add('translate-x-full');
+                
+                setTimeout(() => {
+                    panel.classList.add('hidden');
+                }, 300);
+            }
+
+            switchAdminTab(tab) {
+                ['measures', 'frequency', 'data', 'edit'].forEach(t => {
+                    const el = document.getElementById(`view-${t}`);
+                    if (el) el.classList.add('hidden');
+                    const tabEl = document.getElementById(`tab-${t}`);
+                    if (tabEl) tabEl.classList.remove('tab-active');
+                });
+                
+                document.getElementById(`view-${tab}`).classList.remove('hidden');
+                const tabBtn = document.getElementById(`tab-${tab}`);
+                if (tabBtn) tabBtn.classList.add('tab-active');
+                
+                if (tab === 'measures') this.renderMeasuresList();
+                if (tab === 'frequency') this.updateFrequencyPreview();
+            }
+
+            updateFrequencyPreview() {
+                const dayNames = ['', '一', '二', '三', '四', '五'];
+                document.getElementById('previewDeptDay').textContent = dayNames[this.settings.deptDay] || '四';
+                document.getElementById('previewDeptWeeks').textContent = this.settings.deptWeeks;
+                document.getElementById('previewLineDays').textContent = this.settings.lineDays;
+                document.getElementById('previewQualityCount').textContent = this.settings.qualityCount;
+            }
+
+            renderMeasuresList() {
+                const container = document.getElementById('measuresList');
+                const search = document.getElementById('searchMeasures').value.toLowerCase();
+                const category = document.getElementById('filterCategory').value;
+                
+                let filtered = this.measures.filter(m => {
+                    const matchSearch = !search || m.action.toLowerCase().includes(search);
+                    const matchCategory = category === 'all' || m.category === category;
+                    return matchSearch && matchCategory;
+                });
+
+                if (filtered.length === 0) {
+                    container.innerHTML = '<div class="text-center text-slate-500 py-8">暂无检查项</div>';
+                    return;
+                }
+
+                container.innerHTML = filtered.map(m => {
+                    const createdDate = new Date(m.createdAt).toLocaleDateString('zh-CN');
+                    return `
+                    <div class="group flex items-center justify-between p-4 rounded-xl bg-slate-800/50 border border-slate-700 hover:border-slate-600 transition-all">
+                        <div class="flex items-center gap-3 flex-1 cursor-pointer" onclick="app.editMeasure('${m.id}')">
+                            <div class="flex-1 min-w-0">
+                                <div class="flex items-center gap-2 mb-1">
+                                    <span class="font-medium text-white truncate">${m.action}</span>
+                                    ${!m.active ? '<span class="px-2 py-0.5 rounded text-xs bg-red-500/20 text-red-400 border border-red-500/30">已停用</span>' : ''}
+                                </div>
+                                <div class="flex items-center gap-2 text-xs text-slate-400">
+                                    <span class="px-2 py-0.5 rounded bg-slate-700">${m.category}</span>
+                                    <span class="text-amber-400">录入: ${createdDate}</span>
+                                    ${m.owner ? `<span>• ${m.owner}</span>` : ''}
+                                </div>
+                            </div>
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <button onclick="event.stopPropagation(); app.toggleMeasureActive('${m.id}')" class="p-2 hover:bg-slate-700 rounded-lg text-slate-400 hover:text-white" title="${m.active ? '停用' : '启用'}">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="${m.active ? 'M10 9v6m4-6v6m7-3a9 9 0 11-18 0 9 9 0 0118 0z' : 'M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z M21 12a9 9 0 11-18 0 9 9 0 0118 0z'}"></path></svg>
+                            </button>
+                            <button onclick="event.stopPropagation(); app.deleteMeasure('${m.id}')" class="p-2 hover:bg-red-500/20 rounded-lg text-slate-400 hover:text-red-400" title="删除">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+                            </button>
+                        </div>
+                    </div>
+                `}).join('');
+            }
+
+            updateFrequencySettings() {
+                this.settings.deptDay = parseInt(document.getElementById('settingDeptDay').value) || 4;
+                this.settings.deptWeeks = parseInt(document.getElementById('settingDeptWeeks').value) || 5;
+                this.settings.lineDays = parseInt(document.getElementById('settingLineDays').value) || 14;
+                this.settings.qualityCount = parseInt(document.getElementById('settingQualityCount').value) || 40;
+                
+                this.saveSettings();
+                this.showToast('频次设置已更新');
+            }
+
+            addNewMeasure() {
+                document.getElementById('editId').value = '';
+                document.getElementById('measureForm').reset();
+                document.getElementById('editFormTitle').textContent = '新增检查项';
+                document.getElementById('measureActive').checked = true;
+                this.currentTags = [];
+                this.renderTags();
+                this.updateFrequencyPreview();
+                this.switchAdminTab('edit');
+            }
+
+            editMeasure(id) {
+                const m = this.measures.find(x => x.id === id);
+                if (!m) return;
+
+                document.getElementById('editId').value = m.id;
+                document.getElementById('measureName').value = m.action;
+                document.getElementById('measureCategory').value = m.category;
+                document.getElementById('measureDesc').value = m.desc || '';
+                document.getElementById('measureOwner').value = m.owner || '';
+                document.getElementById('measureActive').checked = m.active !== false;
+                
+                this.currentTags = m.tags || [];
+                this.renderTags();
+                this.updateFrequencyPreview();
+                
+                document.getElementById('editFormTitle').textContent = '编辑检查项（录入时间不变）';
+                this.switchAdminTab('edit');
+            }
+
+            addTag() {
+                const input = document.getElementById('newTag');
+                const tag = input.value.trim();
+                if (tag && !this.currentTags.includes(tag)) {
+                    this.currentTags.push(tag);
+                    this.renderTags();
+                    input.value = '';
+                }
+            }
+
+            removeTag(tag) {
+                this.currentTags = this.currentTags.filter(t => t !== tag);
+                this.renderTags();
+            }
+
+            renderTags() {
+                const container = document.getElementById('tagsContainer');
+                container.innerHTML = this.currentTags.map(t => `
+                    <span class="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs bg-blue-500/20 text-blue-300 border border-blue-500/30">
+                        ${t}
+                        <button type="button" onclick="app.removeTag('${t}')" class="hover:text-white">×</button>
+                    </span>
+                `).join('');
+            }
+
+            saveMeasure(e) {
+                e.preventDefault();
+                
+                const id = document.getElementById('editId').value;
+                const isNew = !id;
+                
+                const measureData = {
+                    id: id || `m-${Date.now()}`,
+                    action: document.getElementById('measureName').value,
+                    category: document.getElementById('measureCategory').value,
+                    desc: document.getElementById('measureDesc').value,
+                    owner: document.getElementById('measureOwner').value,
+                    tags: [...this.currentTags],
+                    active: document.getElementById('measureActive').checked,
+                    // 新记录记录当前时间，编辑保持原时间
+                    createdAt: isNew ? new Date().toISOString() : this.measures.find(m => m.id === id)?.createdAt
+                };
+
+                if (id) {
+                    const idx = this.measures.findIndex(m => m.id === id);
+                    if (idx !== -1) this.measures[idx] = { ...this.measures[idx], ...measureData };
+                } else {
+                    this.measures.push(measureData);
+                }
+
+                this.saveMeasures();
+                this.showToast(isNew ? '检查项已创建，录入时间已记录' : '检查项已更新');
+                this.switchAdminTab('measures');
+            }
+
+            toggleMeasureActive(id) {
+                const m = this.measures.find(x => x.id === id);
+                if (m) {
+                    m.active = !m.active;
+                    this.saveMeasures();
+                    this.renderMeasuresList();
+                    this.showToast(m.active ? '检查项已启用' : '检查项已停用');
+                }
+            }
+
+            deleteMeasure(id) {
+                if (!confirm('确定要删除这个检查项吗？所有层级的审核记录都将被清除。')) return;
+                
+                this.measures = this.measures.filter(m => m.id !== id);
+                delete this.qualitySchedule[id];
+                Object.keys(this.checks).forEach(key => {
+                    if (key.startsWith(id + '-')) delete this.checks[key];
+                });
+                localStorage.setItem('lpa_checks', JSON.stringify(this.checks));
+                
+                this.saveMeasures();
+                this.renderMeasuresList();
+                this.showToast('检查项已删除');
+            }
+
+            quickCheck(measureId, level, index) {
+                const dateStr = this.currentDate.toISOString().split('T')[0];
+                const key = `${measureId}-${level}-${dateStr}`;
+                const current = this.checks[key] || { count: 0, completed: false };
+                
+                if (current.count > index) current.count = index;
+                else current.count = index + 1;
+                
+                current.completed = current.count >= 5;
+                this.checks[key] = current;
+                
+                localStorage.setItem('lpa_checks', JSON.stringify(this.checks));
+                this.render();
+                this.updateStats();
+            }
+
+            openDetail(measureId, level) {
+                const m = this.measures.find(x => x.id === measureId);
+                const dateStr = this.currentDate.toISOString().split('T')[0];
+                const status = this.getCheckStatus(measureId, level, dateStr);
+                
+                const levelNames = { dept: '部门级', line: '产线级', quality: '质量级' };
+                const levelColors = { dept: 'blue', line: 'green', quality: 'purple' };
+                
+                const createdDate = new Date(m.createdAt).toLocaleDateString('zh-CN');
+                const cycleInfo = this.getCycleInfo(level, this.currentDate, m);
+                
+                document.getElementById('modalTitle').textContent = m.action;
+                document.getElementById('modalLevelBadge').className = `inline-block px-3 py-1 rounded-full text-xs font-medium bg-${levelColors[level]}-500/20 text-${levelColors[level]}-300 border border-${levelColors[level]}-500/30 mb-2`;
+                document.getElementById('modalLevelBadge').textContent = levelNames[level];
+                document.getElementById('modalCycleInfo').textContent = `${cycleInfo} • 录入: ${createdDate}`;
+                
+                let checkSection = '';
+                if (level === 'dept') {
+                    checkSection = `
+                        <div class="bg-slate-800/50 rounded-xl p-4 border border-slate-700">
+                            <h4 class="text-sm font-medium text-slate-400 mb-3">检查确认 (${status.count || 0}/5)</h4>
+                            <div class="flex gap-2">
+                                ${Array.from({length: 5}, (_, i) => `
+                                    <button onclick="app.toggleCheckBox(this, ${i})" class="flex-1 h-12 rounded-lg border-2 transition-all ${status.count > i ? 'bg-blue-500 border-blue-500' : 'border-slate-600 hover:border-blue-400'} flex items-center justify-center">
+                                        ${status.count > i ? '<svg class="w-6 h-6 text-white check-animation" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"></path></svg>' : `<span class="text-slate-500 font-bold">${i + 1}</span>`}
+                                    </button>
+                                `).join('')}
+                            </div>
+                            <p class="text-xs text-slate-500 mt-2">部门级需完成5次确认</p>
+                        </div>
+                    `;
+                } else {
+                    checkSection = `
+                        <div class="flex items-center justify-between bg-slate-800/50 rounded-xl p-4 border border-slate-700">
+                            <span class="text-slate-300">审核状态</span>
+                            <button onclick="app.toggleComplete(this)" class="relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${status.completed ? 'bg-green-500' : 'bg-slate-600'}">
+                                <span class="inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${status.completed ? 'translate-x-6' : 'translate-x-1'}"></span>
+                            </button>
+                        </div>
+                    `;
+                }
+                
+                const content = `
+                    <div class="space-y-4">
+                        <div class="bg-slate-800/50 rounded-xl p-4 border border-slate-700">
+                            <h4 class="text-sm font-medium text-slate-400 mb-2">检查标准</h4>
+                            <p class="text-slate-200">${m.desc || '确认' + m.action + '符合标准要求。'}</p>
+                        </div>
+                        
+                        <div class="grid grid-cols-2 gap-4">
+                            <div class="bg-slate-800/50 rounded-xl p-4 border border-slate-700">
+                                <h4 class="text-sm font-medium text-slate-400 mb-1">类别</h4>
+                                <p class="text-lg font-semibold text-white">${m.category}</p>
+                            </div>
+                            <div class="bg-slate-800/50 rounded-xl p-4 border border-slate-700">
+                                <h4 class="text-sm font-medium text-slate-400 mb-1">责任人</h4>
+                                <p class="text-lg font-semibold text-white">${m.owner || '未指定'}</p>
+                            </div>
+                        </div>
+
+                        <div class="bg-slate-800/50 rounded-xl p-4 border border-slate-700">
+                            <h4 class="text-sm font-medium text-slate-400 mb-2">审核备注</h4>
+                            <textarea id="checkNote" class="w-full bg-slate-900 border border-slate-700 rounded-lg p-3 text-white placeholder-slate-500 focus:outline-none focus:border-blue-500 resize-none" rows="3" placeholder="输入审核备注...">${status.note || ''}</textarea>
+                        </div>
+
+                        ${checkSection}
+                    </div>
+                `;
+                
+                document.getElementById('modalBody').innerHTML = content;
+                document.getElementById('detailModal').classList.remove('hidden');
+                setTimeout(() => {
+                    document.getElementById('modalContent').classList.remove('scale-95', 'opacity-0');
+                    document.getElementById('modalContent').classList.add('scale-100', 'opacity-100');
+                }, 10);
+                
+                this.currentDetail = { measureId, level, dateStr };
+            }
+
+            closeModal() {
+                document.getElementById('modalContent').classList.remove('scale-100', 'opacity-100');
+                document.getElementById('modalContent').classList.add('scale-95', 'opacity-0');
+                setTimeout(() => document.getElementById('detailModal').classList.add('hidden'), 300);
+            }
+
+            toggleCheckBox(btn, index) {
+                const checkboxes = btn.parentElement.querySelectorAll('button');
+                if (btn.classList.contains('bg-blue-500')) {
+                    for (let i = index; i < checkboxes.length; i++) {
+                        checkboxes[i].classList.remove('bg-blue-500', 'border-blue-500');
+                        checkboxes[i].classList.add('border-slate-600');
+                        checkboxes[i].innerHTML = `<span class="text-slate-500 font-bold">${i + 1}</span>`;
+                    }
+                } else {
+                    for (let i = 0; i <= index; i++) {
+                        if (!checkboxes[i].classList.contains('bg-blue-500')) {
+                            checkboxes[i].classList.remove('border-slate-600');
+                            checkboxes[i].classList.add('bg-blue-500', 'border-blue-500');
+                            checkboxes[i].innerHTML = `<svg class="w-6 h-6 text-white check-animation" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"></path></svg>`;
+                        }
+                    }
+                }
+            }
+
+            toggleComplete(btn) {
+                const isCompleted = btn.classList.contains('bg-green-500');
+                btn.classList.toggle('bg-green-500');
+                btn.classList.toggle('bg-slate-600');
+                btn.querySelector('span').classList.toggle('translate-x-6');
+                btn.querySelector('span').classList.toggle('translate-x-1');
+            }
+
+            saveCheck() {
+                if (!this.currentDetail) return;
+                const { measureId, level, dateStr } = this.currentDetail;
+                const note = document.getElementById('checkNote').value;
+                
+                let completed = false;
+                let count = 0;
+                
+                if (level === 'dept') {
+                    const checkboxes = document.querySelectorAll('#modalBody button');
+                    count = Array.from(checkboxes).filter(b => b.classList.contains('bg-blue-500')).length;
+                    completed = count >= 5;
+                } else {
+                    const toggle = document.querySelector('#modalBody button[onclick="app.toggleComplete(this)"]');
+                    completed = toggle.classList.contains('bg-green-500');
+                    count = completed ? 1 : 0;
+                }
+                
+                this.checks[`${measureId}-${level}-${dateStr}`] = { completed, count, note };
+                localStorage.setItem('lpa_checks', JSON.stringify(this.checks));
+                
+                this.closeModal();
+                this.render();
+                this.updateStats();
+                this.showToast('审核记录已保存');
+            }
+
+            updateStats() {
+                const dateStr = this.currentDate.toISOString().split('T')[0];
+                let completed = 0, pending = 0;
+                
+                const levels = ['dept', 'line', 'quality'];
+                this.measures.forEach(m => {
+                    if (!m.active) return;
+                    levels.forEach(level => {
+                        if (this.shouldShowMeasure(m, level, this.currentDate)) {
+                            const status = this.getCheckStatus(m.id, level, dateStr);
+                            if (status.completed) completed++;
+                            else pending++;
+                        }
+                    });
+                });
+                
+                document.getElementById('completedToday').textContent = completed;
+                document.getElementById('pendingToday').textContent = pending;
+                document.getElementById('totalMeasures').textContent = this.measures.filter(m => m.active).length;
+            }
+
+            jumpToToday() {
+                this.currentDate = new Date();
+                const today = new Date();
+                const yyyy = today.getFullYear();
+                const mm = String(today.getMonth() + 1).padStart(2, '0');
+                const dd = String(today.getDate()).padStart(2, '0');
+                document.getElementById('datePicker').value = `${yyyy}-${mm}-${dd}`;
+                this.render();
+                this.updateStats();
+                this.updateCycleInfo();
+            }
+
+            exportReport() {
+                const dateStr = this.currentDate.toISOString().split('T')[0];
+                let csv = '日期,层级,类别,检查项,录入时间,状态,检查次数,责任人,备注\n';
+                
+                const levels = ['dept', 'line', 'quality'];
+                const levelNames = { dept: '部门级', line: '产线级', quality: '质量级' };
+                
+                this.measures.forEach(m => {
+                    if (!m.active) return;
+                    const createdDate = new Date(m.createdAt).toLocaleDateString('zh-CN');
+                    levels.forEach(level => {
+                        if (this.shouldShowMeasure(m, level, this.currentDate)) {
+                            const status = this.getCheckStatus(m.id, level, dateStr);
+                            csv += `${dateStr},${levelNames[level]},${m.category},"${m.action}",${createdDate},${status.completed ? '已完成' : '未完成'},${status.count || 0},${m.owner || ''},"${status.note || ''}"\n`;
+                        }
+                    });
+                });
+                
+                const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8;' });
+                const link = document.createElement('a');
+                link.href = URL.createObjectURL(blob);
+                link.download = `分层审核报告_${dateStr}.csv`;
+                link.click();
+                this.showToast('报告已导出');
+            }
+
+            backupData() {
+                const data = {
+                    measures: this.measures,
+                    checks: this.checks,
+                    settings: this.settings,
+                    exportDate: new Date().toISOString()
+                };
+                const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+                const link = document.createElement('a');
+                link.href = URL.createObjectURL(blob);
+                link.download = `LPA备份_${new Date().toISOString().split('T')[0]}.json`;
+                link.click();
+                this.showToast('数据已备份');
+            }
+
+            restoreData(input) {
+                const file = input.files[0];
+                if (!file) return;
+                
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    try {
+                        const data = JSON.parse(e.target.result);
+                        if (data.measures) {
+                            this.measures = data.measures;
+                            this.saveMeasures();
+                        }
+                        if (data.checks) {
+                            this.checks = data.checks;
+                            localStorage.setItem('lpa_checks', JSON.stringify(this.checks));
+                        }
+                        if (data.settings) {
+                            this.settings = data.settings;
+                            localStorage.setItem('lpa_settings', JSON.stringify(this.settings));
+                        }
+                        this.showToast('数据已恢复');
+                        this.render();
+                        this.updateStats();
+                        this.renderMeasuresList();
+                    } catch (err) {
+                        alert('文件格式错误');
+                    }
+                };
+                reader.readAsText(file);
+            }
+
+            clearAllData() {
+                if (!confirm('⚠️ 警告：这将清空所有检查项和审核记录！确定要继续吗？')) return;
+                if (!confirm('再次确认：此操作不可恢复，是否继续？')) return;
+                
+                this.measures = [];
+                this.checks = {};
+                this.qualitySchedule = {};
+                localStorage.removeItem('lpa_measures');
+                localStorage.removeItem('lpa_checks');
+                localStorage.removeItem('lpa_settings');
+                
+                this.settings = { ...this.defaultSettings };
+                localStorage.setItem('lpa_settings', JSON.stringify(this.settings));
+                
+                this.saveMeasures();
+                this.renderMeasuresList();
+                this.render();
+                this.updateStats();
+                this.showToast('所有数据已清空');
+            }
+
+            showToast(message) {
+                const toast = document.createElement('div');
+                toast.className = 'fixed bottom-4 right-4 bg-green-500 text-white px-6 py-3 rounded-xl shadow-lg shadow-green-500/25 transform translate-y-20 opacity-0 transition-all duration-300 z-[10000] flex items-center gap-2';
+                toast.innerHTML = `<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>${message}`;
+                document.body.appendChild(toast);
+                setTimeout(() => toast.classList.remove('translate-y-20', 'opacity-0'), 100);
+                setTimeout(() => {
+                    toast.classList.add('translate-y-20', 'opacity-0');
+                    setTimeout(() => toast.remove(), 300);
+                }, 3000);
+            }
+        }
+    </script>
+</body>
+</html>
